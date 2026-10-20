@@ -117,3 +117,17 @@ grant delete on public.applications to authenticated;
 grant select on public.admin_profiles to authenticated;
 grant update (full_name, phone_number, updated_at) on public.admin_profiles to authenticated;
 grant execute on function public.current_admin_role() to authenticated;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'applications'
+  ) then
+    alter publication supabase_realtime add table public.applications;
+  end if;
+end;
+$$;

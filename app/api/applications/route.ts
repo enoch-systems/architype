@@ -31,7 +31,11 @@ export async function POST(request: Request) {
   let body: Record<string, unknown>
 
   try {
-    body = await request.json()
+    const parsed: unknown = await request.json()
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Invalid application details." }, { status: 400 })
+    }
+    body = parsed as Record<string, unknown>
   } catch {
     return NextResponse.json({ error: "Invalid application details." }, { status: 400 })
   }
@@ -89,13 +93,11 @@ export async function POST(request: Request) {
       has_laptop: hasLaptop,
       motivation,
     })
-    .select("id, created_at")
-    .single()
 
   if (error) {
     console.error("Application insert failed:", error.code)
     return NextResponse.json({ error: "We could not save your application. Please try again." }, { status: 500 })
   }
 
-  return NextResponse.json({ id: data.id, createdAt: data.created_at }, { status: 201 })
+  return NextResponse.json({ submitted: true }, { status: 201 })
 }

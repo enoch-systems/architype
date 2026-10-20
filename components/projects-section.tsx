@@ -389,7 +389,7 @@ export function ProjectsSection() {
                     name="whatsapp"
                     type="tel"
                     autoComplete="tel-national"
-                    pattern="[0-9][0-9 ()\\x2D]{6,}"
+                    pattern="[0-9](?:[0-9]| |\\(|\\)|-){6,}"
                     title="Enter at least seven digits, using only numbers, spaces, parentheses, or hyphens."
                     required
                     className="min-w-0 flex-1 border-0 bg-transparent py-3 text-base normal-case tracking-normal text-background outline-none placeholder:text-background/30 md:text-sm"

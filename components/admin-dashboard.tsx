@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client"
+import { createClient as createSupabaseAuthClient } from "@supabase/supabase-js"
 import {
   Activity,
   ArrowUpLeft,
@@ -12,7 +13,6 @@ import {
   Clipboard,
   Clock3,
   Command,
-  Download,
   ExternalLink,
   FileText,
   LayoutDashboard,
@@ -178,6 +178,12 @@ export function AdminDashboard({
   const [activeView, setActiveView] = useState<AdminView>("Overview")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
+  const [signOutPending, setSignOutPending] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordChangePending, setPasswordChangePending] = useState(false)
   const [search, setSearch] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
@@ -194,6 +200,7 @@ export function AdminDashboard({
         .select("id, full_name, email, whatsapp_number, country, course, created_at, sex, employment_status, has_laptop, motivation, status")
         .order("created_at", { ascending: false })
       if (error) {
+        console.error("Failed to refresh applications:", error.code)
         setRealtimeStatus("Offline")
         return
       }
@@ -207,8 +214,12 @@ export function AdminDashboard({
         void refreshApplications()
       })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") setRealtimeStatus("Live")
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setRealtimeStatus("Offline")
+        if (status === "SUBSCRIBED") {
+          setRealtimeStatus("Live")
+          void refreshApplications()
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setRealtimeStatus("Offline")
+        }
       })
 
     return () => {
@@ -334,27 +345,16 @@ export function AdminDashboard({
     }
   }
 
-  const exportApplications = () => {
-    if (filteredUsers.length === 0) {
-      showNotice("There are no application records to export.")
+  const confirmSignOut = async () => {
+    setSignOutPending(true)
+    const supabase = createBrowserSupabaseClient()
+    const { error } = await supabase.auth.signOut()
+    setSignOutPending(false)
+    if (error) {
+      setSignOutConfirmOpen(false)
+      showNotice("Could not sign out. Please try again.")
       return
     }
-    const headers = ["Name", "Email", "WhatsApp", "Country", "Course", "Registered (Lagos)", "Status"]
-    const rows = filteredUsers.map((user) => [user.name, user.email, user.whatsapp, user.country, user.course, formatNigeriaTime(user.registeredAt), user.status])
-    const csv = [headers, ...rows]
-      .map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","))
-      .join("\r\n")
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
-    const link = document.createElement("a")
-    link.href = url
-    link.download = "tech-trailblazer-applications.csv"
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const signOut = async () => {
-    const supabase = createBrowserSupabaseClient()
-    await supabase.auth.signOut()
     window.location.assign("/academy-login")
   }
 
@@ -382,6 +382,56 @@ export function AdminDashboard({
 
     setSettingsSaved(true)
     showNotice("Admin profile saved.")
+  }
+
+  const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (newPassword !== confirmPassword) {
+      showNotice("New password and confirmation do not match.")
+      return
+    }
+    if (newPassword.length < 12) {
+      showNotice("Choose a new password with at least 12 characters.")
+      return
+    }
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      showNotice("Password change is unavailable because Supabase is not configured.")
+      return
+    }
+
+    setPasswordChangePending(true)
+    const verificationClient = createSupabaseAuthClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } },
+    )
+
+    try {
+      const { data, error } = await verificationClient.auth.signInWithPassword({
+        email: adminEmail,
+        password: currentPassword,
+      })
+      if (error || data.user?.id !== adminId) {
+        showNotice("Current password is incorrect.")
+        return
+      }
+
+      const { error: updateError } = await createBrowserSupabaseClient().auth.updateUser({ password: newPassword })
+      if (updateError) {
+        showNotice(`Could not change password: ${updateError.message}`)
+        return
+      }
+
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      showNotice("Password changed successfully.")
+    } catch (error) {
+      showNotice(error instanceof Error ? `Could not change password: ${error.message}` : "Could not change password. Please try again.")
+    } finally {
+      await verificationClient.auth.signOut()
+      setPasswordChangePending(false)
+    }
   }
 
   const renderOverview = () => (
@@ -525,7 +575,6 @@ export function AdminDashboard({
             <Search className="h-4 w-4" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, course" className="w-full border-0 bg-transparent text-xs text-[#282e24] outline-none placeholder:text-[#a1a69c]" />
           </label>
-          <button type="button" onClick={exportApplications} className="inline-flex h-10 items-center gap-2 border border-[#e1e5dc] bg-white px-3 text-xs text-[#535b4c] hover:bg-[#f7f9f4]"><Download className="h-3.5 w-3.5" /> Export</button>
           <button type="button" onClick={() => setActiveView("Email follow-up")} className="inline-flex h-10 items-center gap-2 bg-[#547631] px-3 text-xs text-white hover:bg-[#3f5c24]"><Mail className="h-3.5 w-3.5" /> Follow up</button>
         </div>
       </div>
@@ -646,7 +695,16 @@ export function AdminDashboard({
       </section>
       <section className="border border-[#e2e6dd] bg-white p-5 sm:p-6">
         <div className="flex items-center gap-3"><ShieldCheck className="h-4 w-4 text-[#71825c]" /><div><h3 className="text-sm font-semibold text-[#30362b]">Security</h3><p className="mt-1 text-xs text-[#858b80]">Authentication and session controls</p></div></div>
-        <div className="mt-5 flex flex-col justify-between gap-4 border-t border-[#edf0e9] pt-5 sm:flex-row sm:items-center"><div><p className="text-xs font-medium text-[#40473b]">Supabase Auth</p><p className="mt-1 text-xs text-[#858b80]">Signed in as {adminEmail}. Sign out of this secure session.</p></div><button type="button" onClick={signOut} className="h-9 border border-[#e2e6dd] px-3 text-xs text-[#5d6556] hover:bg-[#f7f9f4]">Sign out</button></div>
+        <form onSubmit={changePassword} className="mt-5 space-y-4 border-t border-[#edf0e9] pt-5">
+          <div><h4 className="text-xs font-medium text-[#40473b]">Change password</h4><p className="mt-1 text-xs text-[#858b80]">Confirm your current password before choosing a new one.</p></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#777f70] sm:col-span-2">Current password<input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-2 h-10 w-full border border-[#e2e6dd] px-3 text-sm normal-case tracking-normal text-[#343a30]" /></label>
+            <label className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#777f70]">New password<input required type="password" autoComplete="new-password" minLength={12} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-2 h-10 w-full border border-[#e2e6dd] px-3 text-sm normal-case tracking-normal text-[#343a30]" /><span className="mt-1 block normal-case tracking-normal text-[#858b80]">Use at least 12 characters.</span></label>
+            <label className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#777f70]">Confirm new password<input required type="password" autoComplete="new-password" minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-2 h-10 w-full border border-[#e2e6dd] px-3 text-sm normal-case tracking-normal text-[#343a30]" /></label>
+          </div>
+          <button type="submit" disabled={passwordChangePending} className="inline-flex h-10 items-center gap-2 bg-[#547631] px-4 text-xs text-white hover:bg-[#3f5c24] disabled:cursor-not-allowed disabled:opacity-50">{passwordChangePending ? "Changing password..." : "Change password"}</button>
+        </form>
+        <div className="mt-5 flex flex-col justify-between gap-4 border-t border-[#edf0e9] pt-5 sm:flex-row sm:items-center"><div><p className="text-xs font-medium text-[#40473b]">Supabase Auth</p><p className="mt-1 text-xs text-[#858b80]">Signed in as {adminEmail}. Sign out of this secure session.</p></div><button type="button" onClick={() => setSignOutConfirmOpen(true)} className="h-9 border border-[#e2e6dd] px-3 text-xs text-[#5d6556] hover:bg-[#f7f9f4]">Sign out</button></div>
       </section>
     </div>
   )
@@ -714,7 +772,7 @@ export function AdminDashboard({
                 <span className="hidden max-w-40 text-left sm:block"><span className="block truncate text-[11px] font-medium text-[#343a30]">{adminName}</span><span className="mt-0.5 block truncate text-[9px] capitalize text-[#8a9084]">{adminRole} · {adminEmail}</span></span>
                 <ChevronDown className="hidden h-3.5 w-3.5 text-[#858b80] sm:block" />
               </button>
-              {profileOpen && <div className="absolute right-0 top-11 z-50 w-48 border border-[#e2e6dd] bg-white p-1 shadow-xl"><button type="button" onClick={() => { setActiveView("Settings"); setProfileOpen(false) }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-[#50584b] hover:bg-[#f5f7f2]"><Settings2 className="h-3.5 w-3.5" />Profile & security</button><button type="button" onClick={() => void signOut()} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-[#50584b] hover:bg-[#f5f7f2]"><XCircle className="h-3.5 w-3.5" />Sign out</button></div>}
+              {profileOpen && <div className="absolute right-0 top-11 z-50 w-48 border border-[#e2e6dd] bg-white p-1 shadow-xl"><button type="button" onClick={() => { setActiveView("Settings"); setProfileOpen(false) }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-[#50584b] hover:bg-[#f5f7f2]"><Settings2 className="h-3.5 w-3.5" />Profile & security</button><button type="button" onClick={() => { setProfileOpen(false); setSignOutConfirmOpen(true) }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-[#50584b] hover:bg-[#f5f7f2]"><XCircle className="h-3.5 w-3.5" />Sign out</button></div>}
             </div>
           </div>
         </header>
@@ -722,7 +780,7 @@ export function AdminDashboard({
         <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div><p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#7a856d]">{new Intl.DateTimeFormat("en-NG", { dateStyle: "full", timeZone: "Africa/Lagos" }).format(new Date())} · Lagos (WAT)</p><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#20251d] sm:text-[1.75rem]">{activeView === "Overview" ? `Welcome back, ${adminName}` : activeView}</h1><p className="mt-1 text-xs text-[#81887b]">{activeView === "Overview" ? "Here’s what’s happening with your programs today." : `Manage ${activeView.toLowerCase()} for your academy.`}</p></div>
-            <div className="flex items-center gap-2"><span className="inline-flex items-center gap-2 text-[10px] text-[#7d8478]"><span className={`h-2 w-2 ${realtimeStatus === "Live" ? "bg-[#89a85c]" : "bg-[#bea94b]"}`} />{realtimeStatus === "Live" ? "Live data" : "Connecting to data"}</span><button type="button" onClick={exportApplications} className="inline-flex h-9 items-center gap-2 border border-[#dfe3db] bg-white px-3 text-[11px] text-[#535b4c] hover:bg-[#f8f9f6]"><Download className="h-3.5 w-3.5" /><span className="hidden sm:inline">Export</span></button></div>
+            <div className="flex items-center gap-2"><span className="inline-flex items-center gap-2 text-[10px] text-[#7d8478]"><span className={`h-2 w-2 ${realtimeStatus === "Live" ? "bg-[#89a85c]" : "bg-[#bea94b]"}`} />{realtimeStatus === "Live" ? "Live data" : "Connecting to data"}</span></div>
           </div>
           {renderActiveView()}
         </main>
@@ -730,6 +788,19 @@ export function AdminDashboard({
 
       {renderUserDrawer()}
 
+      {signOutConfirmOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#12160f]/35 p-4 backdrop-blur-[2px]">
+          <section role="dialog" aria-modal="true" aria-labelledby="sign-out-title" aria-describedby="sign-out-description" className="w-full max-w-md border border-[#e2e6dd] bg-white p-6 shadow-2xl">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[#7e8773]">Confirm sign out</p>
+            <h2 id="sign-out-title" className="mt-2 text-lg font-semibold text-[#252b21]">Are you sure you want to sign out?</h2>
+            <p id="sign-out-description" className="mt-2 text-sm leading-6 text-[#737b6c]">You’ll need to sign in again to access the admin console.</p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" disabled={signOutPending} onClick={() => setSignOutConfirmOpen(false)} className="h-9 border border-[#e2e6dd] px-3 text-xs text-[#626a5b] disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={signOutPending} onClick={() => void confirmSignOut()} className="h-9 bg-[#547631] px-4 text-xs text-white hover:bg-[#3f5c24] disabled:opacity-50">{signOutPending ? "Signing out..." : "Sign out"}</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {notice && <div role="status" className="fixed bottom-5 right-5 z-[100] flex max-w-sm items-center gap-3 border border-[#dfe4d8] bg-white px-4 py-3 text-xs text-[#41483b] shadow-xl"><span className="h-2 w-2 shrink-0 bg-[#83a551]" />{notice}</div>}
     </div>
