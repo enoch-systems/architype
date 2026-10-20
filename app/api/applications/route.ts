@@ -79,24 +79,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tell us a little more about why you want to learn this skill." }, { status: 400 })
   }
 
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from("applications")
-    .insert({
-      full_name: fullName,
-      email,
-      whatsapp_number: whatsappNumber,
-      sex,
-      country,
-      course,
-      employment_status: employmentStatus,
-      has_laptop: hasLaptop,
-      motivation,
-    })
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("applications")
+      .insert({
+        full_name: fullName,
+        email,
+        whatsapp_number: whatsappNumber,
+        sex,
+        country,
+        course,
+        employment_status: employmentStatus,
+        has_laptop: hasLaptop,
+        motivation,
+      })
 
-  if (error) {
-    console.error("Application insert failed:", error.code)
-    return NextResponse.json({ error: "We could not save your application. Please try again." }, { status: 500 })
+    if (error) {
+      console.error("Application insert failed:", error.code)
+      return NextResponse.json({ error: "We could not save your application. Please try again." }, { status: 500 })
+    }
+  } catch (error) {
+    console.error("Application submission service failed:", error instanceof Error ? error.name : "UnknownError")
+    return NextResponse.json(
+      { error: "Application submission is temporarily unavailable. Please try again." },
+      { status: 503 },
+    )
   }
 
   return NextResponse.json({ submitted: true }, { status: 201 })

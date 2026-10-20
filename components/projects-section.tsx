@@ -95,6 +95,7 @@ export function ProjectsSection() {
   const [selectedCourse, setSelectedCourse] = useState("")
   const [warningMessage, setWarningMessage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<ApplicationReceipt | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const confirmationRef = useRef<HTMLDialogElement>(null)
@@ -102,7 +103,6 @@ export function ProjectsSection() {
   const successRef = useRef<HTMLDialogElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const processingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const dialog = confirmationRef.current
@@ -139,7 +139,6 @@ export function ProjectsSection() {
 
   useEffect(() => () => {
     if (warningTimerRef.current) clearTimeout(warningTimerRef.current)
-    if (processingTimerRef.current) clearTimeout(processingTimerRef.current)
   }, [])
 
   const showWarning = (message: string) => {
@@ -150,6 +149,8 @@ export function ProjectsSection() {
 
   const handleApplicationSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isProcessing) return
+
     const form = event.currentTarget
     const invalidField = Array.from(
       form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[required]"),
@@ -181,18 +182,16 @@ export function ProjectsSection() {
       hasLaptop: read("hasLaptop"),
       motivation: read("motivation"),
     }
-
     setWarningMessage(null)
+    setSubmitError(null)
     setSubmitted(false)
-    setIsProcessing(true)
-    processingTimerRef.current = setTimeout(() => {
-      setIsProcessing(false)
-      setReceipt(application)
-    }, 1800)
+    setReceipt(application)
   }
 
   const editApplication = () => {
+    if (isProcessing) return
     setReceipt(null)
+    setSubmitError(null)
     window.requestAnimationFrame(() => {
       document.getElementById("apply")?.scrollIntoView({ behavior: "smooth", block: "start" })
       document.getElementById("course-select")?.focus({ preventScroll: true })
@@ -200,16 +199,18 @@ export function ProjectsSection() {
   }
 
   const discardApplication = () => {
+    if (isProcessing) return
     formRef.current?.reset()
     setSelectedCourse("")
     setReceipt(null)
+    setSubmitError(null)
     setSubmitted(false)
   }
 
   const confirmApplication = async () => {
-    if (!receipt) return
+    if (!receipt || isProcessing) return
 
-    setReceipt(null)
+    setSubmitError(null)
     setIsProcessing(true)
     try {
       const response = await fetch("/api/applications", {
@@ -217,14 +218,23 @@ export function ProjectsSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(receipt),
       })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? "Your application could not be saved. Please try again.")
+      const result: unknown = await response.json().catch(() => null)
+      const errorMessage = typeof result === "object" && result !== null && "error" in result &&
+        typeof result.error === "string"
+        ? result.error
+        : "Your application could not be saved. Please try again."
+      if (!response.ok) throw new Error(errorMessage)
+      if (typeof result !== "object" || result === null || !("submitted" in result) || result.submitted !== true) {
+        throw new Error("We could not confirm that your application was saved. Please try again.")
+      }
 
+      setReceipt(null)
+      setSubmitError(null)
+      formRef.current?.reset()
+      setSelectedCourse("")
       setSubmitted(true)
-      window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (error) {
-      setReceipt(receipt)
-      showWarning(error instanceof Error ? error.message : "Your application could not be saved. Please try again.")
+      setSubmitError(error instanceof Error ? error.message : "Your application could not be saved. Please try again.")
     } finally {
       setIsProcessing(false)
     }
@@ -481,6 +491,7 @@ export function ProjectsSection() {
               </p>
               <button
                 type="submit"
+                disabled={isProcessing}
                 className="inline-flex items-center gap-3 border border-background/30 px-6 py-4 text-[11px] tracking-[0.2em] uppercase text-background transition-colors hover:bg-background hover:text-foreground"
               >
                 Submit Application
@@ -509,24 +520,6 @@ export function ProjectsSection() {
         </div>
       )}
 
-      {isProcessing && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/60 px-6 backdrop-blur-sm"
-        >
-          <div className="flex w-full max-w-sm flex-col items-center border border-border bg-background px-8 py-10 text-center shadow-2xl">
-            <LoaderCircle aria-hidden="true" className="h-20 w-20 animate-spin text-lime-700" />
-            <p className="mt-6 text-[11px] tracking-[0.24em] uppercase text-muted-foreground">
-              Preparing your application
-            </p>
-            <p className="mt-4 text-xl font-light tracking-tight text-foreground">
-              Processing<span className="inline-block w-7 text-left animate-pulse">...</span>
-            </p>
-          </div>
-        </div>
-      )}
-
       <dialog
         ref={receiptRef}
         aria-labelledby="application-receipt-title"
@@ -551,6 +544,7 @@ export function ProjectsSection() {
               </div>
               <button
                 type="button"
+                disabled={isProcessing}
                 aria-label="Close review"
                 onClick={() => setReceipt(null)}
                 className="flex h-9 w-9 shrink-0 items-center justify-center border border-border text-foreground transition-colors hover:bg-muted"
@@ -558,6 +552,12 @@ export function ProjectsSection() {
                 <X aria-hidden="true" className="h-4 w-4" />
               </button>
             </div>
+
+            {submitError && (
+              <p role="alert" className="mt-5 border-l-2 border-red-600 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800">
+                {submitError}
+              </p>
+            )}
 
             <dl className="mt-5 divide-y divide-border">
               {[
@@ -581,6 +581,7 @@ export function ProjectsSection() {
             <div className="mt-7 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:justify-between">
               <button
                 type="button"
+                disabled={isProcessing}
                 onClick={discardApplication}
                 className="w-full border border-foreground/20 px-4 py-3 text-[10px] tracking-[0.18em] uppercase text-foreground/70 transition-colors hover:border-foreground/50 sm:w-auto"
               >
@@ -589,6 +590,7 @@ export function ProjectsSection() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
+                  disabled={isProcessing}
                   onClick={editApplication}
                   className="w-full border border-foreground/20 px-4 py-3 text-[10px] tracking-[0.18em] uppercase text-foreground/75 transition-colors hover:border-foreground/50 sm:w-auto"
                 >
@@ -596,11 +598,22 @@ export function ProjectsSection() {
                 </button>
                 <button
                   type="button"
+                  disabled={isProcessing}
                   onClick={confirmApplication}
-                  className="inline-flex w-full items-center justify-center gap-2 border border-foreground bg-foreground px-4 py-3 text-[10px] tracking-[0.18em] uppercase text-background transition-colors hover:bg-transparent hover:text-foreground sm:w-auto"
+                  aria-busy={isProcessing}
+                  className="inline-flex w-full items-center justify-center gap-2 border border-foreground bg-foreground px-4 py-3 text-[10px] tracking-[0.18em] uppercase text-background transition-colors hover:bg-transparent hover:text-foreground disabled:cursor-wait disabled:opacity-60 sm:w-auto"
                 >
-                  Confirm &amp; submit
-                  <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
+                  {isProcessing ? (
+                    <>
+                      <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      Confirm &amp; submit
+                      <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -625,7 +638,7 @@ export function ProjectsSection() {
             Application submitted successfully
           </h2>
           <p className="mt-4 text-sm leading-[1.75] text-muted-foreground">
-            We&apos;ll reach you through your WhatsApp number or email with the next steps.
+            Your application has been saved and is now available to the academy admissions team. We&apos;ll contact you by WhatsApp or email with the next steps.
           </p>
           <button
             type="button"
