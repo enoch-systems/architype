@@ -43,7 +43,7 @@ import {
   YAxis,
 } from "recharts"
 
-type AdminView = "Overview" | "Users" | "Email follow-up" | "Admin team" | "Settings"
+type AdminView = "Overview" | "Users" | "Email follow-up" | "Settings"
 
 export type AdminUser = {
   id: string
@@ -115,7 +115,6 @@ const navItems: { view: AdminView; icon: typeof LayoutDashboard }[] = [
   { view: "Overview", icon: LayoutDashboard },
   { view: "Users", icon: Users },
   { view: "Email follow-up", icon: Mail },
-  { view: "Admin team", icon: ShieldCheck },
   { view: "Settings", icon: Settings2 },
 ]
 
@@ -184,11 +183,7 @@ export function AdminDashboard({
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [template, setTemplate] = useState<keyof typeof emailTemplates>("Welcome")
-  const [inviteOpen, setInviteOpen] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState("")
   const [settingsSaved, setSettingsSaved] = useState(false)
-  const [profileName, setProfileName] = useState(adminName)
-  const [profilePhone, setProfilePhone] = useState("")
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -369,13 +364,6 @@ export function AdminDashboard({
       return
     }
     showNotice("Email sending is not configured yet. Add the Resend API key and verified sender to enable delivery.")
-  }
-
-  const submitInvite = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    showNotice("Admin invitations are not connected yet.")
-    setInviteOpen(false)
-    setInviteEmail("")
   }
 
   const saveAdminProfile = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -644,24 +632,6 @@ export function AdminDashboard({
     </div>
   )
 
-  const renderAdminTeam = () => (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div><p className="text-xs text-[#77806e]">Access</p><h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#20251d]">Admin team</h2><p className="mt-1 text-sm text-[#7a8174]">Manage who can access the academy dashboard.</p></div>
-        <button type="button" onClick={() => setInviteOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 bg-[#547631] px-4 text-xs text-white hover:bg-[#3f5c24]"><UserPlus className="h-3.5 w-3.5" /> Invite admin</button>
-      </div>
-      <div className="border border-[#e2e6dd] bg-white">
-        <div className="flex items-center gap-4 border-b border-[#edf0e9] p-5">
-          <span className="flex h-10 w-10 items-center justify-center bg-[#edf2e7] text-sm font-semibold text-[#5f773e]">{initials(adminName)}</span>
-          <div className="min-w-0 flex-1"><p className="text-sm font-medium text-[#30362b]">{adminName}</p><p className="mt-1 text-xs text-[#858b80]">{adminEmail}</p></div>
-          <span className="border border-[#dfe8d5] bg-[#f4f8ee] px-2.5 py-1 text-[10px] capitalize text-[#577735]">{adminRole}</span>
-        </div>
-        <div className="flex gap-3 bg-[#fafbf8] p-5 text-xs leading-5 text-[#6c7466]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#71825c]" /><p>Role permissions are enforced by Supabase Auth and database row-level security. Admin invitations are not configured yet.</p></div>
-      </div>
-      <div className="border border-[#e2e6dd] bg-white p-5"><h3 className="text-sm font-semibold text-[#30362b]">Invitation roles</h3><div className="mt-4 grid gap-4 sm:grid-cols-2"><div className="border border-[#edf0e9] p-4"><p className="text-xs font-medium text-[#30362b]">Administrator</p><p className="mt-2 text-xs leading-5 text-[#81887b]">Manage applicants, follow-ups, and admin access.</p></div><div className="border border-[#edf0e9] p-4"><p className="text-xs font-medium text-[#30362b]">Viewer</p><p className="mt-2 text-xs leading-5 text-[#81887b]">Review applicant records without changing settings.</p></div></div></div>
-    </div>
-  )
-
   const renderSettings = () => (
     <div className="mx-auto max-w-4xl space-y-6">
       <div><p className="text-xs text-[#77806e]">Workspace</p><h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#20251d]">Settings</h2><p className="mt-1 text-sm text-[#7a8174]">Profile and access preferences.</p></div>
@@ -684,7 +654,6 @@ export function AdminDashboard({
   const renderActiveView = () => {
     if (activeView === "Users") return renderUsers()
     if (activeView === "Email follow-up") return renderEmailFollowUp()
-    if (activeView === "Admin team") return renderAdminTeam()
     if (activeView === "Settings") return renderSettings()
     return renderOverview()
   }
@@ -761,7 +730,6 @@ export function AdminDashboard({
 
       {renderUserDrawer()}
 
-      {inviteOpen && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#12160f]/35 p-4 backdrop-blur-[2px]"><form onSubmit={submitInvite} className="w-full max-w-md border border-[#e2e6dd] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-[10px] uppercase tracking-[0.18em] text-[#7e8773]">Admin team</p><h2 className="mt-2 text-lg font-semibold text-[#252b21]">Invite an admin</h2></div><button type="button" aria-label="Close invite dialog" onClick={() => setInviteOpen(false)} className="flex h-8 w-8 items-center justify-center text-[#687161] hover:bg-[#f3f5f0]"><X className="h-4 w-4" /></button></div><label className="mt-6 block text-[10px] uppercase tracking-[0.15em] text-[#777f70]">Email address<input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="teammate@example.com" className="mt-2 h-10 w-full border border-[#e2e6dd] px-3 text-sm normal-case tracking-normal text-[#343a30] outline-none focus:border-[#93a979]" /></label><label className="mt-4 block text-[10px] uppercase tracking-[0.15em] text-[#777f70]">Role<select className="mt-2 h-10 w-full border border-[#e2e6dd] bg-white px-3 text-sm normal-case tracking-normal text-[#343a30]"><option>Administrator</option><option>Viewer</option></select></label><p className="mt-4 text-[11px] leading-5 text-[#81887b]">Invitations activate after Supabase Auth is configured.</p><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setInviteOpen(false)} className="h-9 border border-[#e2e6dd] px-3 text-xs text-[#626a5b]">Cancel</button><button type="submit" className="h-9 bg-[#547631] px-4 text-xs text-white hover:bg-[#3f5c24]">Prepare invite</button></div></form></div>}
 
       {notice && <div role="status" className="fixed bottom-5 right-5 z-[100] flex max-w-sm items-center gap-3 border border-[#dfe4d8] bg-white px-4 py-3 text-xs text-[#41483b] shadow-xl"><span className="h-2 w-2 shrink-0 bg-[#83a551]" />{notice}</div>}
     </div>
