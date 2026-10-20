@@ -118,21 +118,6 @@ const navItems: { view: AdminView; icon: typeof LayoutDashboard }[] = [
   { view: "Settings", icon: Settings2 },
 ]
 
-const emailTemplates = {
-  Welcome: {
-    subject: "Welcome to Tech Trailblazer Academy",
-    body: "Hi {{first_name}},\n\nThanks for registering for {{course}}. We have received your details and will follow up with your next steps shortly.\n\nTech Trailblazer Academy",
-  },
-  Registration: {
-    subject: "Your registration is being reviewed",
-    body: "Hi {{first_name}},\n\nYour {{course}} registration is under review. We will contact you with the next steps.\n\nTech Trailblazer Academy",
-  },
-  Payment: {
-    subject: "A reminder about your {{course}} program",
-    body: "Hi {{first_name}},\n\nThis is a reminder regarding payment for {{course}}. Please contact our team if you need assistance.\n\nTech Trailblazer Academy",
-  },
-}
-
 function formatNigeriaTime(value: string) {
   return new Intl.DateTimeFormat("en-NG", {
     dateStyle: "medium",
@@ -188,7 +173,6 @@ export function AdminDashboard({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [template, setTemplate] = useState<keyof typeof emailTemplates>("Welcome")
   const [settingsSaved, setSettingsSaved] = useState(false)
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -237,7 +221,6 @@ export function AdminDashboard({
   }, [search, users])
 
   const allVisibleSelected = filteredUsers.length > 0 && filteredUsers.every((user) => selectedIds.has(user.id))
-  const selectedUsers = users.filter((user) => selectedIds.has(user.id))
   const activeNav = navItems.find((item) => item.view === activeView)
   const ActiveIcon = activeNav?.icon ?? LayoutDashboard
 
@@ -356,14 +339,6 @@ export function AdminDashboard({
       return
     }
     window.location.assign("/academy-login")
-  }
-
-  const handleSendEmail = async () => {
-    if (selectedUsers.length === 0) {
-      showNotice("Select one or more users before preparing a follow-up.")
-      return
-    }
-    showNotice("Email sending is not configured yet. Add the Resend API key and verified sender to enable delivery.")
   }
 
   const saveAdminProfile = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -637,48 +612,28 @@ export function AdminDashboard({
   )
 
   const renderEmailFollowUp = () => (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <p className="text-xs text-[#77806e]">Communication</p>
-        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#20251d]">Email follow-up</h2>
-        <p className="mt-1 text-sm text-[#7a8174]">Prepare a message for selected applicants.</p>
-      </div>
-      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-        <section className="border border-[#e2e6dd] bg-white p-5">
-          <div className="flex items-center justify-between border-b border-[#edf0e9] pb-4">
-            <div><h3 className="text-sm font-semibold text-[#30362b]">Recipients</h3><p className="mt-1 text-xs text-[#858b80]">Choose who receives this message</p></div>
-            <Users className="h-4 w-4 text-[#748566]" />
-          </div>
-          <div className="mt-4 space-y-3">
-            <label className="flex items-center gap-3 text-xs text-[#4f5749]"><input type="radio" name="recipients" checked={selectedUsers.length > 0} onChange={() => {}} className="accent-[#63843a]" /> Selected users ({selectedUsers.length})</label>
-            <label className="flex items-center gap-3 text-xs text-[#4f5749]"><input type="radio" name="recipients" checked={selectedUsers.length === 0} onChange={() => setSelectedIds(new Set())} className="accent-[#63843a]" /> All applicants ({users.length})</label>
-          </div>
-          <button type="button" onClick={() => setActiveView("Users")} className="mt-6 inline-flex items-center gap-2 border border-[#e2e6dd] px-3 py-2 text-[11px] text-[#4f6040] hover:bg-[#f7f9f4]"><Users className="h-3.5 w-3.5" /> Manage selection</button>
-        </section>
-
-        <section className="border border-[#e2e6dd] bg-white p-5">
-          <div className="flex items-center justify-between border-b border-[#edf0e9] pb-4">
-            <div><h3 className="text-sm font-semibold text-[#30362b]">Compose follow-up</h3><p className="mt-1 text-xs text-[#858b80]">Select a template and review the message</p></div>
-            <Mail className="h-4 w-4 text-[#748566]" />
-          </div>
-          <label className="mt-5 block text-[10px] font-medium uppercase tracking-[0.14em] text-[#777f70]">Email type
-            <select value={template} onChange={(event) => setTemplate(event.target.value as keyof typeof emailTemplates)} className="mt-2 h-10 w-full border border-[#e2e6dd] bg-white px-3 text-sm text-[#343a30] outline-none focus:border-[#94aa75]">
-              {Object.keys(emailTemplates).map((name) => <option key={name}>{name}</option>)}
-            </select>
-          </label>
-          <label className="mt-4 block text-[10px] font-medium uppercase tracking-[0.14em] text-[#777f70]">Subject
-            <input value={emailTemplates[template].subject} readOnly className="mt-2 h-10 w-full border border-[#e2e6dd] bg-[#fafbf8] px-3 text-sm text-[#343a30]" />
-          </label>
-          <label className="mt-4 block text-[10px] font-medium uppercase tracking-[0.14em] text-[#777f70]">Message preview
-            <textarea value={emailTemplates[template].body} readOnly rows={7} className="mt-2 w-full resize-y border border-[#e2e6dd] bg-[#fafbf8] px-3 py-3 text-sm leading-6 text-[#485041]" />
-          </label>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="max-w-xs text-[11px] leading-5 text-[#81887b]">Sending activates after an email provider is configured.</p>
-            <button type="button" onClick={handleSendEmail} className="inline-flex h-10 items-center gap-2 bg-[#547631] px-4 text-xs text-white hover:bg-[#3f5c24]"><Mail className="h-3.5 w-3.5" /> Send email</button>
-          </div>
-        </section>
-      </div>
-    </div>
+    <section className="mx-auto flex min-h-[420px] max-w-2xl flex-col items-center justify-center border border-[#e2e6dd] bg-white px-6 py-12 text-center sm:px-10">
+      <span className="flex h-14 w-14 items-center justify-center border border-[#e2e6dd] bg-[#f7f9f4] text-[#547631]">
+        <Mail aria-hidden="true" className="h-6 w-6" />
+      </span>
+      <p className="mt-6 text-[10px] font-medium uppercase tracking-[0.2em] text-[#71825c]">
+        Coming soon
+      </p>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#20251d]">
+        Email follow-up
+      </h2>
+      <p className="mt-3 max-w-md text-sm leading-6 text-[#7a8174]">
+        Applicant email follow-ups are being prepared and will be available soon. You can continue to review applicant registrations in the meantime.
+      </p>
+      <button
+        type="button"
+        onClick={() => setActiveView("Users")}
+        className="mt-7 inline-flex h-10 items-center gap-2 bg-[#547631] px-4 text-xs text-white transition-colors hover:bg-[#3f5c24]"
+      >
+        <Users aria-hidden="true" className="h-3.5 w-3.5" />
+        View applicants
+      </button>
+    </section>
   )
 
   const renderSettings = () => (
