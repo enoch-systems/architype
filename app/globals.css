@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes hero-image-slide {
+  to {
+    transform: translateX(-33.333333%);
+  }
+}
+
+.hero-image-track {
+  animation: hero-image-slide 24s linear infinite;
+}
+
+@keyframes submit-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.45) rotate(-25deg);
+  }
+  75% {
+    opacity: 1;
+    transform: scale(1.12) rotate(4deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-image-track {
+    animation: none;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
